@@ -25,9 +25,17 @@ clock = pygame.time.Clock() #Variable um Geschwindigkeit der Berechnungen des Pr
 def Gen(num):
     return set( [   (random.randrange(0, GRID_HEIGHT), random.randrange(0, GRID_WIDTH)) for i in range(num)]   )
 
+def CellIsSurviving():
+    pass
+        
+        
 
-def Draw_grid(positions):
-    for position in positions: #Jede lebendige Zelle wird durchgegangen
+def newCells():
+    pass
+
+
+def Draw_grid(all_cells):
+    for position in all_cells: #Jede lebendige Zelle wird durchgegangen
         col, row = position #Position der Zelle wird aufgespalten (col = x-Koordinate; row = Y-Koordinate)
         top_left = (col * TILE_SIZE, row * TILE_SIZE) #Obere linke Ecke der würfelförmigen Zelle wird ermittelt (also ein Punkt)
         pygame.draw.rect(screen, YELLOW, (*top_left, TILE_SIZE, TILE_SIZE)) #Zelle wird ausgehend von der oberen linken Ecke mit der Farbe YELLOW gezeichnet
@@ -58,36 +66,31 @@ def Get_neighbors(pos):
             neighbors.append((x + dx, y + dy)) #Die Nachbarszelle wird in die Liste eingefuegt
 
     return neighbors
-#Warum funktioniert [-1, 0, 1]? Das geht, weil man damit perfekt alle Zellen um die lebendige Zelle herum erfassen kann, da:
-                                    #[3][6][9]      [-1, 1][ 0, 1][ 1, 1]
-                                    #[2][X][8]  =   [-1, 0][Zelle][ 1, 0]
-                                    #[1][4][7]      [-1,-1][ 0,-1][ 1,-1] und die For-Schleife all diese Kombinationen durchgeht. 
-                                                                        #Die linke Matrix zeigt die Reihenfolge der kontrolierten Zellen an
 
-def Adjust_grid(positions):
+def Adjust_grid(all_cells):
     all_neighbors = set() #Alle benachbarten Zellen VOR dem Update werden in diesem Set gespeichert
-    new_positions = set() #Die Positionen von den neuen Zellen, also NACH dem Update, werden hier gespeichert
+    update = set() #Die Positionen von den neuen Zellen, also NACH dem Update, werden hier gespeichert
 
-    for position in positions: #Die Schleife geht durch alle lebendigen Zellen durch
-        neighbors = Get_neighbors(position) #Alle Nachbarn von der Zelle des jetzigen For-Durchlaufes werden in der Variable gespeichert
+    for cell in all_cells: #Die Schleife geht durch alle lebendigen Zellen durch
+        neighbors = Get_neighbors(cell) #Alle Nachbarn von der Zelle des jetzigen For-Durchlaufes werden in der Variable gespeichert
         all_neighbors.update(neighbors) #Alle Nachbarn aus der neighbors-Variable werden in das Set all_neighbors koppiert/übertragen
 
-        neighbors = list(filter(lambda x: x in positions, neighbors )) #Alle toten Nachbarn werden rausgefiltert 
-        #lambda dient als Filterfunktion, welche dann neighbors durchgeht (es schaut nach, ob die Zelle in positions erwähnt wird; nein = tot = rausgefiltert). filter() gibt einen Iterator zurueck, welchen wir in eine Liste konvertieren
+        neighbors = list(filter(lambda x: x in all_cells, neighbors )) #Alle toten Nachbarn werden rausgefiltert 
+        #lambda dient als Filterfunktion, welche dann neighbors durchgeht (es schaut nach, ob die Zelle in all_cells erwähnt wird; nein = tot = rausgefiltert). filter() gibt einen Iterator zurueck, welchen wir in eine Liste konvertieren
 
         if len(neighbors) in [2,3]: #Wenn die Zelle 2 oder 3 lebendige Nachbarn besitzt :
-            new_positions.add(position) #Wird diese zu new_positions übertragen (bleibt also am leben, sind KEINE neuen Zellen)
+            update.add(cell) #Wird diese zu new_positions übertragen (bleibt also am leben, sind KEINE neuen Zellen)
 
-    for position in all_neighbors: #Geht alle erfassten Nachbarzellen durch
-        neighbors = Get_neighbors(position) #Ermittelt alle Nachbarzellen (also 2.Grades) der Nachbarzellen (1.Grades)
-        neighbors = list(filter(lambda x: x in positions, neighbors )) #Filtert alle toten Nachbarzellen 2.Grades raus
+    for cell in all_neighbors: #Geht alle erfassten Nachbarzellen durch
+        neighbors = Get_neighbors(cell) #Ermittelt alle Nachbarzellen (also 2.Grades) der Nachbarzellen (1.Grades)
+        neighbors = list(filter(lambda x: x in all_cells, neighbors )) #Filtert alle toten Nachbarzellen 2.Grades raus
 
         if len(neighbors) == 3: #Wenn die Nachbarzelle 3 Nachbarn hat:
-            new_positions.add(position) #Wird diese zu new_positions übertragen (Das sind neue Zellen)
+            update.add(cell) #Wird diese zu new_positions übertragen (Das sind neue Zellen)
 
     #Alle Zellen, mit zuvielen oder zuwenigen Nachbarn werden nie nach new_positions übertragen, was bedeutet, das diese nach dem Update nicht leben
 
-    return new_positions #Alle Zellen, die NACH dem Update noch am leben sind werden zurück gegeben
+    return update #Alle Zellen, die NACH dem Update noch am leben sind werden zurück gegeben
 
 
 #Hauptfunktion
@@ -98,7 +101,7 @@ def Main():
     count = 0
     update_freq = 10 #Variable um die Updategeschwindigkeit zu kontrollieren (desto kleiner desto schneller)
 
-    positions = set() #Variable um alle einzelnen Lebendigen Zellen zu speichern
+    all_cells = set() #Variable um alle einzelnen Lebendigen Zellen zu speichern
 
     #Hauptschleife
     while running:
@@ -110,7 +113,7 @@ def Main():
         #Updaten der Zellen
         if count >= update_freq: 
             count = 0 #Neuer Updatecyklus beginnt
-            positions = Adjust_grid(positions) #Geupdatete Zellen werden auf den "Zellenspeicher" übertragen
+            all_cells = Adjust_grid(all_cells) #Geupdatete Zellen werden auf den "Zellenspeicher" übertragen
 
         pygame.display.set_caption("Playing" if playing else "Paused") #Momentaner Modus wird im Fensternamen beschrieben (also ob z.B pausiert ist)
 
@@ -126,25 +129,25 @@ def Main():
                 row = y // TILE_SIZE
                 pos = (col, row) 
 
-                if pos in positions: #Wenn man auf eine Zelle klickt, welche schon gelb/lebendig war, ist sie dies nicht mehr
-                    positions.remove(pos)
+                if pos in all_cells: #Wenn man auf eine Zelle klickt, welche schon gelb/lebendig war, ist sie dies nicht mehr
+                    all_cells.remove(pos)
                 else:
-                    positions.add(pos) #Hier passiert das umgekehrte, die Zelle wird gelb/lebendig
+                    all_cells.add(pos) #Hier passiert das umgekehrte, die Zelle wird gelb/lebendig
                 
             if event.type == pygame.KEYDOWN: #Registrierung von Tasteninputs (allgemein)
                 if event.key == pygame.K_SPACE: # Kontrollieren, ob leertaste/Space gedrückt wurde
                     playing = not playing #Pausieren durch veränderung der Variable
 
                 if event.key == pygame.K_c: # Kontrollieren, ob C gedrückt wurde
-                    positions = set() #positions wird geleert, alle Zellen sind Tot/ Spielefläche ist wieder frei
+                    all_cells = set() #all_cells wird geleert, alle Zellen sind Tot/ Spielefläche ist wieder frei
                     playing = False #Spiel wird pausiert
                     count = 0 #Damit der Wechsel von Pause zu SPielen sich nicht komisch anfühlt, wird der Updatecyklus resetet
 
                 if event.key == pygame.K_g: # Kontrollieren, ob G gedrückt wurde
-                    positions = Gen(random.randrange(2,5) * GRID_WIDTH) #Generieren eine zufällige Anzahl zufälliger Zellen (GRID_WIDTH ist vom Tutorial-Ersteller willkürlich gewählt, kann man auch weglassen)
+                    all_cells = Gen(random.randrange(2,5) * GRID_WIDTH) #Generieren eine zufällige Anzahl zufälliger Zellen (GRID_WIDTH ist vom Tutorial-Ersteller willkürlich gewählt, kann man auch weglassen)
 
         screen.fill(GREY) # Hintergrund des Fensters
-        Draw_grid(positions) #Gitterlinien werden gezeichnet
+        Draw_grid(all_cells) #Gitterlinien werden gezeichnet
         pygame.display.update() # Alle veränderungen werden aufs Fenster übertragen
 
     pygame.quit() #Damit keine Berechnungen im Hintergrund passieren obwohl das Fenster geschlossen ist, wird das Programm zusätzlich hier nochmals beendet
