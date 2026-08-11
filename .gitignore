@@ -1,1 +1,6 @@
 .vs/
+*.suo
+*.user
+*.json
+Debug/
+Release/
