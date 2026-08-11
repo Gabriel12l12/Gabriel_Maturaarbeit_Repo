@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36811.4 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Maturaarbeit", "Maturaarbeit\Maturaarbeit.pyproj", "{9EAA647A-1E59-4553-A26F-F8AE1EA24292}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9EAA647A-1E59-4553-A26F-F8AE1EA24292}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9EAA647A-1E59-4553-A26F-F8AE1EA24292}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C7DE87E1-E411-46D8-9033-4976DB742D5C}
+	EndGlobalSection
+EndGlobal
