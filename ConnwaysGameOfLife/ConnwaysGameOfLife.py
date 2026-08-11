@@ -1,13 +1,17 @@
 #  -*- coding: cp1252 -*-
-
 import pygame
 import random 
+import numpy as np
+import matplotlib.pyplot as plt 
 
 pygame.init() 
 
 BLACK = (0,0,0)
 GREY =  (128,128,128)
 YELLOW = (255,255,0)
+RED = (255,0,0)
+GREEN = (0,255,0)
+BLUE = (0,0,255)
 
 WIDTH, HEIGHT = 800,800 #Grösse des Fensters
 TILE_SIZE = 20 #Grösse der Zellen
@@ -15,30 +19,38 @@ GRID_WIDTH = WIDTH // TILE_SIZE #Breite der Zelle (Bestimmt die vertikalen Gitte
 GRID_HEIGHT = HEIGHT // TILE_SIZE #Höhe der Zelle (Bestimmt die horizontalen Gitterlinien)
 FPS = 60 #Frames per second
 
-#Erstellen eines Fensters
 screen = pygame.display.set_mode((WIDTH,HEIGHT))
+clock = pygame.time.Clock()
 
+def cellPlotAnim(ax, line_sick,line_immune,x_value,y_valueSick, y_valueImmune):
+      line_sick.set_data(x_value, y_valueSick)
+      line_immune.set_data(x_value, y_valueImmune)
 
-clock = pygame.time.Clock() #Variable um Geschwindigkeit der Berechnungen des Programmes zu regeln
+      ax.relim()
+      ax.autoscale_view()
 
-#Funktion um zufällige Zellenpositionen zu wählen (an diesen Stellen werden die Zellen lebendig)
-def Gen(num):
-    return set( [   (random.randrange(0, GRID_HEIGHT), random.randrange(0, GRID_WIDTH)) for i in range(num)]   )
-
-def CellIsSurviving():
-    pass
-        
-        
-
-def newCells():
-    pass
-
+      plt.draw()
+      plt.pause(0.001)
+    
+def countCells(all_cells):
+    sick =0
+    immune = 0
+    for cell in all_cells:
+        if all_cells[cell][0] == "sick":
+            sick += 1
+        else:
+            immune += 1
+    return sick,immune
 
 def Draw_grid(all_cells):
     for position in all_cells: #Jede lebendige Zelle wird durchgegangen
         col, row = position #Position der Zelle wird aufgespalten (col = x-Koordinate; row = Y-Koordinate)
         top_left = (col * TILE_SIZE, row * TILE_SIZE) #Obere linke Ecke der würfelförmigen Zelle wird ermittelt (also ein Punkt)
-        pygame.draw.rect(screen, YELLOW, (*top_left, TILE_SIZE, TILE_SIZE)) #Zelle wird ausgehend von der oberen linken Ecke mit der Farbe YELLOW gezeichnet
+        if all_cells[position][0] == "immune":
+            colour = BLUE
+        else:
+            colour = YELLOW
+        pygame.draw.rect(screen, colour, (*top_left, TILE_SIZE, TILE_SIZE)) 
 
     #Horizontalen Gitterlinien werden gezeichnet anhand der Zell- und Bildschirmgrösse
     for row in range(GRID_WIDTH):
@@ -47,6 +59,7 @@ def Draw_grid(all_cells):
     #Vertikale Gitterlinien werden gezeichnet anhand der Zell- und Bildschirmgrösse
     for col in range(GRID_HEIGHT):
         pygame.draw.line(screen, BLACK, (col*TILE_SIZE,0), (col * TILE_SIZE, HEIGHT))
+
 
 def Get_neighbors(pos):
     x,y = pos #Die x und y Koordinaten der Zelle werden aufgespalten in die Variabeln x (für x-Koordinate) und y (für die y-Koordinate)
@@ -67,31 +80,27 @@ def Get_neighbors(pos):
 
     return neighbors
 
+
 def Adjust_grid(all_cells):
-    all_neighbors = set() #Alle benachbarten Zellen VOR dem Update werden in diesem Set gespeichert
-    update = set() #Die Positionen von den neuen Zellen, also NACH dem Update, werden hier gespeichert
+    all_neighbors = set()
+    update = {} 
 
-    for cell in all_cells: #Die Schleife geht durch alle lebendigen Zellen durch
-        neighbors = Get_neighbors(cell) #Alle Nachbarn von der Zelle des jetzigen For-Durchlaufes werden in der Variable gespeichert
-        all_neighbors.update(neighbors) #Alle Nachbarn aus der neighbors-Variable werden in das Set all_neighbors koppiert/übertragen
+    for cell in all_cells:
+        if all_cells[cell][0] == "immune":
+            update[cell] = ["immune"]
+        else:
+            neighbors = Get_neighbors(cell)
+            all_neighbors.update(neighbors) 
+            update[cell] = ["immune"] 
 
-        neighbors = list(filter(lambda x: x in all_cells, neighbors )) #Alle toten Nachbarn werden rausgefiltert 
-        #lambda dient als Filterfunktion, welche dann neighbors durchgeht (es schaut nach, ob die Zelle in all_cells erwähnt wird; nein = tot = rausgefiltert). filter() gibt einen Iterator zurueck, welchen wir in eine Liste konvertieren
+    for neighbor in all_neighbors:
+        if not neighbor in all_cells:
+            update[neighbor] = ["sick"] 
+    
+    return update 
 
-        if len(neighbors) in [2,3]: #Wenn die Zelle 2 oder 3 lebendige Nachbarn besitzt :
-            update.add(cell) #Wird diese zu new_positions übertragen (bleibt also am leben, sind KEINE neuen Zellen)
-
-    for cell in all_neighbors: #Geht alle erfassten Nachbarzellen durch
-        neighbors = Get_neighbors(cell) #Ermittelt alle Nachbarzellen (also 2.Grades) der Nachbarzellen (1.Grades)
-        neighbors = list(filter(lambda x: x in all_cells, neighbors )) #Filtert alle toten Nachbarzellen 2.Grades raus
-
-        if len(neighbors) == 3: #Wenn die Nachbarzelle 3 Nachbarn hat:
-            update.add(cell) #Wird diese zu new_positions übertragen (Das sind neue Zellen)
-
-    #Alle Zellen, mit zuvielen oder zuwenigen Nachbarn werden nie nach new_positions übertragen, was bedeutet, das diese nach dem Update nicht leben
-
-    return update #Alle Zellen, die NACH dem Update noch am leben sind werden zurück gegeben
-
+def Gen(num):
+    return set( [   (random.randrange(0, GRID_HEIGHT), random.randrange(0, GRID_WIDTH)) for i in range(num)]   )
 
 #Hauptfunktion
 def Main():
@@ -99,57 +108,82 @@ def Main():
     playing = False
 
     count = 0
-    update_freq = 10 #Variable um die Updategeschwindigkeit zu kontrollieren (desto kleiner desto schneller)
+    updateCount = 0
+    update_freq = 10 
+    all_cells = {} 
 
-    all_cells = set() #Variable um alle einzelnen Lebendigen Zellen zu speichern
+    plt.ion()
+    fig, ax = plt.subplots()
+    (line_sick,) = ax.plot([], [], "b-", label="Krank")
+    (line_immune,) = ax.plot([], [], "r-", label="Immun")
+    x_value = [0]
+    y_valueSick = [0]
+    y_valueImmune = [0]
 
     #Hauptschleife
     while running:
-        clock.tick(FPS) #Regulierung der Berechnungsgeschwindigkeit
+        clock.tick(FPS) 
 
-        if playing: #Nur wenn man im SPielen-Modus ist, wird gezählt, sodass keine Updates während Pause gedrückt ist passieren
+        if playing: 
             count += 1
 
         #Updaten der Zellen
         if count >= update_freq: 
-            count = 0 #Neuer Updatecyklus beginnt
-            all_cells = Adjust_grid(all_cells) #Geupdatete Zellen werden auf den "Zellenspeicher" übertragen
+            count = 0 
+            all_cells = Adjust_grid(all_cells) 
+            updateCount += 1
+            sick, immune = countCells(all_cells)
 
-        pygame.display.set_caption("Playing" if playing else "Paused") #Momentaner Modus wird im Fensternamen beschrieben (also ob z.B pausiert ist)
+            x_value.append(updateCount)
+            y_valueSick.append(sick)
+            y_valueImmune.append(immune)
+
+            cellPlotAnim(ax, line_sick,line_immune,x_value,y_valueSick, y_valueImmune)
+
+        pygame.display.set_caption("Playing" if playing else "Paused") 
 
         for event in pygame.event.get(): #Listet alle Events von pygame auf, welche passiert sind (in der Warteschlange stehen, verarbeitet zu werden)
 
             if event.type == pygame.QUIT: #Wird ausgeführt, wenn man den X Knopf oben rechts am Fenster drückt
                 running = False #Mainschleife wird beende
 
-            if event.type == pygame.MOUSEBUTTONDOWN: #Kontrolliert, ob ein Mausinput passiert ist (egal was für einer)
-                x,y = pygame.mouse.get_pos() #Position des clicks wird ermittelt
-                #X und Y Koordinaten des Klicks werden einzeln durch die Zellengrösse geteilt und zusammengesetzt(um zu ermitteln, welche Zelle angeklickt wurde)
-                col = x// TILE_SIZE
-                row = y // TILE_SIZE
-                pos = (col, row) 
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    x,y = pygame.mouse.get_pos() #Position des clicks wird ermittelt
+                    #X und Y Koordinaten des Klicks werden einzeln durch die Zellengrösse geteilt und zusammengesetzt(um zu ermitteln, welche Zelle angeklickt wurde)
+                    col = x// TILE_SIZE
+                    row = y // TILE_SIZE
+                    pos = (col, row) 
 
-                if pos in all_cells: #Wenn man auf eine Zelle klickt, welche schon gelb/lebendig war, ist sie dies nicht mehr
-                    all_cells.remove(pos)
+                    if pos in all_cells and all_cells[pos][0] == "immune": 
+                        all_cells.pop(pos)
+                    else:
+                        all_cells[pos] = ["immune"]
                 else:
-                    all_cells.add(pos) #Hier passiert das umgekehrte, die Zelle wird gelb/lebendig
+                    x,y = pygame.mouse.get_pos()
+                    col = x// TILE_SIZE
+                    row = y // TILE_SIZE
+                    pos = (col, row) 
+
+                    if pos in all_cells: 
+                        all_cells.pop(pos)
+                    else:
+                        all_cells[pos] = ["sick"]
                 
             if event.type == pygame.KEYDOWN: #Registrierung von Tasteninputs (allgemein)
                 if event.key == pygame.K_SPACE: # Kontrollieren, ob leertaste/Space gedrückt wurde
                     playing = not playing #Pausieren durch veränderung der Variable
 
                 if event.key == pygame.K_c: # Kontrollieren, ob C gedrückt wurde
-                    all_cells = set() #all_cells wird geleert, alle Zellen sind Tot/ Spielefläche ist wieder frei
+                    all_cells = {} #all_cells wird geleert, alle Zellen sind Tot/ Spielefläche ist wieder frei
                     playing = False #Spiel wird pausiert
-                    count = 0 #Damit der Wechsel von Pause zu SPielen sich nicht komisch anfühlt, wird der Updatecyklus resetet
+                    count = 0 
 
-                if event.key == pygame.K_g: # Kontrollieren, ob G gedrückt wurde
-                    all_cells = Gen(random.randrange(2,5) * GRID_WIDTH) #Generieren eine zufällige Anzahl zufälliger Zellen (GRID_WIDTH ist vom Tutorial-Ersteller willkürlich gewählt, kann man auch weglassen)
-
-        screen.fill(GREY) # Hintergrund des Fensters
-        Draw_grid(all_cells) #Gitterlinien werden gezeichnet
-        pygame.display.update() # Alle veränderungen werden aufs Fenster übertragen
-
-    pygame.quit() #Damit keine Berechnungen im Hintergrund passieren obwohl das Fenster geschlossen ist, wird das Programm zusätzlich hier nochmals beendet
+                if event.key == pygame.K_g: 
+                    all_cells = Gen(random.randrange(2,5) * GRID_WIDTH) 
+        screen.fill(GREY) 
+        Draw_grid(all_cells) 
+        pygame.display.update() 
+    pygame.quit() 
 
 Main()
