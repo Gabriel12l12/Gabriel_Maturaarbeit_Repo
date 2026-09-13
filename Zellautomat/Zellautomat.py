@@ -4,6 +4,8 @@ import taichi.math as tm
 import numpy as np
 import json
 import os
+import matplotlib
+import tkinter
 
 seed = int(input("Gib einen Seed ein: "))
 
@@ -22,13 +24,17 @@ ti.init(arch=ti.gpu, random_seed=seed)
 #Struct fur die Zelle
 
 Cell = ti.types.struct(
-    status=ti.u8,
+
+    #Von Claude vorgeschlagen ti.u8 --> ti.u32
+    status=ti.u32,
 
     age=ti.u8,
 
     householdID=ti.u32,
     maxHouseholdSize=ti.u8,
-    currentHouseholdSize=ti.u8,
+
+    #Von Claude vorgeschlagen ti.u8 --> ti.u32
+    currentHouseholdSize=ti.u32,
 
     baseSocialFactor=ti.u8,
     socialFactor=ti.u8,
@@ -45,12 +51,7 @@ def ResetTaichiFields(Cell, width, height, renderWidth, renderHeight):
     gridAlt = Cell.field(shape=(width, height))
     grid = Cell.field(shape=(width, height))
 
-    #Wurde von Claude verändert
-    # FIX 4: Form (height, width) statt (width, height) -> passt zum
-    # tatsächlichen Schreibzugriff [j, width-i-1] in ColorCells.
-    # Bei quadratischen Grids (width == height) fiel das nie auf,
-    # bei rechteckigen Grids führte es zu Out-of-Bounds-Schreibzugriffen
-    # auf der GPU (kein Bounds-Check im Release-Modus) -> Bild friert ein/bleibt leer.
+
     gridColorField = ti.Vector.field(3, dtype=ti.f32, shape=(height, width))
     statePallete = ti.Vector.field(3, dtype=ti.f32, shape=4)
     renderColorField = ti.Vector.field(3, dtype=ti.f32, shape=(renderWidth, renderHeight))
@@ -233,10 +234,7 @@ def InitializePallets(statePallete: ti.template()):
 @ti.kernel
 def KrankheitsAusbruch(width: ti.i32, height: ti.i32, grid: ti.template(), erfolgreichInfiziert: ti.template(), startKranke: ti.i32):
 
-    #Wurde von Claude verändert
-    # FIX 1: Sicherheitsnetz gegen Endlosschleife, falls startKranke > Anzahl Zellen
-    # (die while-Schleife könnte sonst nie terminieren, weil nie genug
-    # gesunde Zellen gefunden werden können -> Programm friert ein)
+
     erfolgreichInfiziert[None] = 0
     versuche = 0
     maxVersuche = width * height * 20
@@ -369,10 +367,6 @@ def Calculation(width: ti.i32, height: ti.i32, grid: ti.template(), gridAlt: ti.
             anzahlSuchen = 0
             cellAlter = gridAlt[i, j].age
 
-            #Wurde von Cloaude verändert
-            # FIX 2: maxRadius kam vorher immer als 0 rein (kein Slider gesetzt),
-            # wodurch die Doppelschleife nie einen Nachbarn traf und sich
-            # daher niemand mehr anstecken konnte (Simulation "eingefroren").
             for di in range(-maxRadius, maxRadius + 1):
                 for dj in range(-maxRadius, maxRadius + 1):
 
@@ -430,11 +424,7 @@ def ColorCells(width: ti.i32, height: ti.i32, grid: ti.template(), gridColorFiel
     for i, j in ti.ndrange(width, height):
         cellAge = grid[i, j].age
 
-        #Wurde von Cloude verändert
-        # FIX 3: vorher "* (20/cellAge)" -> bei jungen Zellen weit >1 (clippt zu Weiss),
-        # bei alten Zellen nahe 0 (fast schwarz) -> erzeugte zufälliges Rauschen,
-        # das die eigentlichen Status-Farben (rot/blau/schwarz) optisch verschluckt.
-        # Jetzt: sanfte, begrenzte Helligkeitsvariation zwischen 0.5 und 1.0.
+
         helligkeit = 1.0 - (ti.cast(cellAge, ti.f32) / 90.0) * 0.5
 
         gridColorField[j, width - i - 1] = statePallete[grid[i, j].status] * helligkeit
@@ -446,7 +436,8 @@ def ColorCells(width: ti.i32, height: ti.i32, grid: ti.template(), gridColorFiel
 def ZaehleStatus(width: ti.i32, height: ti.i32, grid: ti.template()) -> tm.ivec4:
     counts = tm.ivec4(0, 0, 0, 0)
     for i, j in ti.ndrange(width, height):
-        counts[grid[i, j].status] += 1
+        status_idx = ti.cast(grid[i, j].status, ti.i32)
+        counts[status_idx] += 1
     return counts
 
 
@@ -457,8 +448,7 @@ def BildRunterskallieren(width: ti.i32, height: ti.i32, renderWidth: ti.i32, ren
         simI = int((i / renderWidth) * width)
         simJ = int((j / renderHeight) * height)
 
-        #Von Cloude Verändert
-        # FIX 4: Indexreihenfolge an neue Form (height, width) angepasst
+
         renderColorField[i, j] = gridColorField[simJ, simI]
 
 
@@ -483,8 +473,6 @@ while window.running:
 
             InitializePallets(statePallete)
 
-            #VOn CLaude verändert
-            # FIX 1: startKranke wird zusätzlich auf die tatsächliche Zellenzahl gedeckelt
             startKrankeSicher = min(startKranke, width * height)
             KrankheitsAusbruch(width, height, grid, erfolgreichInfiziert, startKrankeSicher)
 
