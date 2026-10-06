@@ -6,6 +6,7 @@ import json
 import os
 import matplotlib
 import tkinter
+import csv
 
 seed = int(input("Gib einen Seed ein: "))
 
@@ -66,6 +67,8 @@ ResetTaichiFields(Cell, width, height, renderWidth, renderHeight)
 simulationRunning = False
 mode = 0
 setup = False
+headlessMode = False
+headlessDurchläufe = 0
 
 #Demografie Eingabe
 childDemo = 0
@@ -90,7 +93,7 @@ householdData = np.array([], dtype=np.float32)
 startKranke = 0
 socialInput = 0
 
-window = ti.ui.Window("Zellautomat", res=(800, 800), vsync=False, fps_limit=5)
+window = ti.ui.Window("Zellautomat", res=(800, 800), vsync=False, fps_limit=200)
 canvas = window.get_canvas()
 
 #Berechnung
@@ -200,7 +203,7 @@ def LadeParameter(dateiname):
 
         startKranke = int(daten.get("startKranke", startKranke))
         baseTransmissionrate = int(daten.get("baseTransmissionrate", baseTransmissionrate))
-        mortalityrate = int(daten.get("mortalityrate", mortalityrate))
+        mortalityrate = float(daten.get("mortalityrate", mortalityrate))
         maxRadius = int(daten.get("maxRadius", maxRadius))
 
         incubationTime = int(daten.get("incubationTime", incubationTime))
@@ -394,7 +397,7 @@ def Calculation(width: ti.i32, height: ti.i32, grid: ti.template(), gridAlt: ti.
                                         ti.atomic_max(grid[ni, nj].status, 1)
 
   
-
+            #Sterbeschance mit Bernoulli
             gesammteKrankheitsdauer = incubationTime + recoveryTime
             gesammtRisikoZelle = mortalityRate * ((ti.cast(cellAlter, ti.f32) / 90.0) * ti.cast(ageFactor, ti.f32))
             gesammtRisikoZelle = ti.max(0.0, ti.min(gesammtRisikoZelle, 0.9999))
@@ -451,6 +454,12 @@ def BildRunterskallieren(width: ti.i32, height: ti.i32, renderWidth: ti.i32, ren
 
         renderColorField[i, j] = gridColorField[simJ, simI]
 
+@ti.kernel 
+def parallelGridCopy(width: ti.i32, height: ti.i32,grid: ti.template(), gridAlt: ti.template()):
+
+    for i, j in ti.ndrange(width, height):
+        gridAlt[i, j] = grid[i, j]
+
 
 while window.running:
 
@@ -488,7 +497,7 @@ while window.running:
             setup = False
             print(grid.shape)
 
-        gridAlt.copy_from(grid)
+        parallelGridCopy(width, height, grid, gridAlt)
 
         debugVersuche[None] = 0
         debugErfolge[None] = 0
@@ -545,6 +554,7 @@ while window.running:
                 SpeichereParameter(SpeicherDatei)
             if gui.button("Laden"):
                 LadeParameter(SpeicherDatei)
+                print(mortalityrate)
 
             if statusMeldungTimer > 0:
                 gui.text(statusMeldung)
