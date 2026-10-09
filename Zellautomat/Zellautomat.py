@@ -8,6 +8,8 @@ import matplotlib
 import tkinter
 import csv
 
+#Richiger push
+
 seed = int(input("Gib einen Seed ein: "))
 
 
