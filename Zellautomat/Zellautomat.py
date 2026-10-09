@@ -63,17 +63,12 @@ def ResetTaichiFields(Cell, width, height, renderWidth, renderHeight):
 ResetTaichiFields(Cell, width, height, renderWidth, renderHeight)
 
 
-#Simulation States
+#States
 simulationRunning = False
 mode = 0
 setup = False
-
-#Variabeln fuer Headless mode
 headlessMode = False
-anzahlHeadlessDurchlaufe = 50
-durchlauf = 1
-
-tag = 0
+headlessDurchläufe = 0
 
 #Demografie Eingabe
 childDemo = 0
@@ -87,7 +82,7 @@ einsHaushalt = 0
 zweiHaushalt = 0
 dreiHaushalt = 0
 vierHaushalt = 0
-fuenfHaushalt = 0
+fünfHaushalt = 0
 plusSechs = 0
 haushaltFehler = False
 
@@ -113,11 +108,10 @@ incubationTime = 1
 recoveryTime = 1
 
 maxRadius = 1
+durchlauf = 0
+maxDurchlauf = 0
 
-wechsel = False
-
-
-# Debug-Z�hler zur Diagnose der Ansteckungslogik
+# Debug-Zähler zur Diagnose der Ansteckungslogik
 debugVersuche = ti.field(dtype=ti.i32, shape=())
 debugErfolge = ti.field(dtype=ti.i32, shape=())
 
@@ -125,11 +119,7 @@ debugErfolge = ti.field(dtype=ti.i32, shape=())
 SpeicherDatei = "einstellungen.json"
 statusMeldung = ""
 statusMeldungTimer = 0
-csvSpeicherName = "Ergebnisse"
-
-simulationsverlauf = []
-sicherungsfrequenz = 5
-
+frameZaehler = 0
 
 
 #==============
@@ -141,6 +131,7 @@ def SammleParameter():
     return {
         "width": width,
         "height": height,
+        "maxDurchlauf": maxDurchlauf,
 
         "childDemo": childDemo,
         "adultDemo": adultDemo,
@@ -152,7 +143,7 @@ def SammleParameter():
         "zweiHaushalt": zweiHaushalt,
         "dreiHaushalt": dreiHaushalt,
         "vierHaushalt": vierHaushalt,
-        "f�nfHaushalt": fuenfHaushalt,
+        "fünfHaushalt": fünfHaushalt,
         "householdFactor": householdFactor,
 
         "startKranke": startKranke,
@@ -177,9 +168,9 @@ def SpeichereParameter(dateiname):
 
 
 def LadeParameter(dateiname):
-    global width, height
+    global width, height, maxDurchlauf
     global childDemo, adultDemo, rentnerDemo, plusDemo, ageFactor, socialInput
-    global einsHaushalt, zweiHaushalt, dreiHaushalt, vierHaushalt, fuenfHaushalt, plusSechs, householdFactor
+    global einsHaushalt, zweiHaushalt, dreiHaushalt, vierHaushalt, fünfHaushalt, plusSechs, householdFactor
     global startKranke, baseTransmissionrate, mortalityrate, maxRadius, incubationTime, recoveryTime
     global demoFehler, haushaltFehler, statusMeldung, statusMeldungTimer
 
@@ -194,7 +185,7 @@ def LadeParameter(dateiname):
 
         width = int(daten.get("width", width))
         height = int(daten.get("height", height))
-
+        maxDurchlauf = int(daten.get("maxDurchlauf", maxDurchlauf))
 
         childDemo = int(daten.get("childDemo", childDemo))
         adultDemo = int(daten.get("adultDemo", adultDemo))
@@ -205,7 +196,7 @@ def LadeParameter(dateiname):
         zweiHaushalt = int(daten.get("zweiHaushalt", zweiHaushalt))
         dreiHaushalt = int(daten.get("dreiHaushalt", dreiHaushalt))
         vierHaushalt = int(daten.get("vierHaushalt", vierHaushalt))
-        fuenfHaushalt = int(daten.get("fuenfHaushalt", fuenfHaushalt))
+        fünfHaushalt = int(daten.get("fünfHaushalt", fünfHaushalt))
         householdFactor = int(daten.get("householdFactor", householdFactor))
 
 
@@ -221,25 +212,13 @@ def LadeParameter(dateiname):
         plusDemo = 100 - (childDemo + adultDemo + rentnerDemo)
         demoFehler = plusDemo < 0
 
-        plusSechs = 100 - (einsHaushalt + zweiHaushalt + dreiHaushalt + vierHaushalt + fuenfHaushalt)
+        plusSechs = 100 - (einsHaushalt + zweiHaushalt + dreiHaushalt + vierHaushalt + fünfHaushalt)
         haushaltFehler = plusSechs < 0
 
         statusMeldung = "Geladen: " + dateiname
     except Exception as e:
         statusMeldung = "Fehler beim Laden: " + str(e)
     statusMeldungTimer = 120
-
-#========
-#Ergebnisse Speichern:
-#=======
-
-def writeCSV(simulationsverlauf, csvSpeicherName):
-    with open("Ergebnisse.csv", "w", newline="", encoding= "utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Durchlauf", "Tag", "Gesund", "Krank", "Tot"])
-        writer.writerows(simulationsverlauf)
-
-        print("CSV beendet")
 
 
 #==============
@@ -370,7 +349,7 @@ def CreateHouseholdsStep(width: ti.i32, height: ti.i32, grid: ti.template()):
 
 
 @ti.kernel
-def Calculation(width: ti.i32, height: ti.i32, grid: ti.template(), gridAlt: ti.template(), baseTransmissionrate: ti.f32, householdFactor: ti.i32, mortalityRate: ti.f32, ageFactor: ti.i32, incubationTime: ti.i32, recoveryTime: ti.i32, maxRadius: ti.i32):
+def Calculation(width: ti.i32, height: ti.i32, grid: ti.template(), gridAlt: ti.template(), baseTransmissionrate: ti.f32, householdFactor: ti.i32, mortalityRate: ti.f32, ageFactor: ti.i32, incubationTime: ti.i32, recoveryTime: ti.i32, maxRadius: ti.i32, debugVersuche: ti.template(), debugErfolge: ti.template()):
 
     for i, j in ti.ndrange(width, height):
 
@@ -406,7 +385,7 @@ def Calculation(width: ti.i32, height: ti.i32, grid: ti.template(), gridAlt: ti.
                                 anzahlSuchen += 1
 
                                 if gridAlt[ni, nj].status == 0:
-                                    
+                                    ti.atomic_add(debugVersuche[None], 1)
 
                                     currentTransmissionrate = baseTransmissionrate
 
@@ -414,7 +393,7 @@ def Calculation(width: ti.i32, height: ti.i32, grid: ti.template(), gridAlt: ti.
                                         currentTransmissionrate = baseTransmissionrate * ti.cast(householdFactor, ti.f32)
 
                                     if ti.random() <= currentTransmissionrate:
-                                        
+                                        ti.atomic_add(debugErfolge[None], 1)
                                         ti.atomic_max(grid[ni, nj].status, 1)
 
   
@@ -453,15 +432,9 @@ def ColorCells(width: ti.i32, height: ti.i32, grid: ti.template(), gridColorFiel
 
         gridColorField[j, width - i - 1] = statePallete[grid[i, j].status] * helligkeit
 
-@ti.kernel 
-def parallelGridCopy(width: ti.i32, height: ti.i32,grid: ti.template(), gridAlt: ti.template()):
-
-    for i, j in ti.ndrange(width, height):
-        gridAlt[i, j] = grid[i, j]
 
 
-
-
+#Debugging
 @ti.kernel
 def ZaehleStatus(width: ti.i32, height: ti.i32, grid: ti.template()) -> tm.ivec4:
     counts = tm.ivec4(0, 0, 0, 0)
@@ -481,6 +454,13 @@ def BildRunterskallieren(width: ti.i32, height: ti.i32, renderWidth: ti.i32, ren
 
         renderColorField[i, j] = gridColorField[simJ, simI]
 
+@ti.kernel 
+def parallelGridCopy(width: ti.i32, height: ti.i32,grid: ti.template(), gridAlt: ti.template()):
+
+    for i, j in ti.ndrange(width, height):
+        gridAlt[i, j] = grid[i, j]
+
+
 while window.running:
 
 
@@ -490,7 +470,7 @@ while window.running:
         statusMeldungTimer -= 1
 
 #==========================
-#Simulation mit head
+#Simulation
 #===========================
     if simulationRunning:
         with gui.sub_window("Simulation", x=0, y=0, width=0.3, height=0.25):
@@ -498,10 +478,7 @@ while window.running:
             if gui.button("Stop"):
                 simulationRunning = False
 
-        #Fields mit Werten füllem
         if setup:
-
-            ResetTaichiFields(Cell, width, height, renderWidth, renderHeight)
 
             InitializePallets(statePallete)
 
@@ -518,94 +495,30 @@ while window.running:
                 CreateHouseholdsStep(width, height, grid)
 
             setup = False
+            print(grid.shape)
 
-        Calculation(width, height, grid, gridAlt, baseTransmissionrate * 0.01, householdFactor, mortalityrate * 0.01, ageFactor, incubationTime, recoveryTime, maxRadius)
+        parallelGridCopy(width, height, grid, gridAlt)
 
-        #Grafische Darstellung
+        debugVersuche[None] = 0
+        debugErfolge[None] = 0
+        Calculation(width, height, grid, gridAlt, baseTransmissionrate * 0.01, householdFactor, mortalityrate * 0.01, ageFactor, incubationTime, recoveryTime, maxRadius, debugVersuche, debugErfolge)
+
         ColorCells(width, height, grid, gridColorField, statePallete)
         BildRunterskallieren(width, height, renderWidth, renderHeight, gridColorField, renderColorField)
 
 
-        tag += 1
+        frameZaehler += 1
         counts = ZaehleStatus(width, height, grid)
-        print(f"Tag {tag} | Gesund: {counts[0]}  Krank: {counts[1]}  Immun: {counts[2]}  Tot: {counts[3]}")
-
-        
-
-#^==============================
-#Headless Mde
-
-    if headlessMode:
-        if durchlauf <= anzahlHeadlessDurchlaufe:
-
-            #Fields Setup fuer die Simulation
-            if setup:
-
-                ResetTaichiFields(Cell, width, height, renderWidth, renderHeight)
-
-                InitializePallets(statePallete)
-
-                startKrankeSicher = min(startKranke, width * height)
-                KrankheitsAusbruch(width, height, grid, erfolgreichInfiziert, startKrankeSicher)
-
-                InitializeAge(width, height, grid, demografie)
-
-                InitializeHouseholds(width, height, grid, householdData)
-           
-                InitializeSocial(width, height, grid, socialInput)
-
-                for i in range(10):
-                    CreateHouseholdsStep(width, height, grid)
-
-                print("Setup fertig")
-                print(grid[0,0])
-                setup = False
-
-            parallelGridCopy(width, height, grid, gridAlt)
-            Calculation(width, height, grid, gridAlt, baseTransmissionrate * 0.01, householdFactor, mortalityrate * 0.01, ageFactor, incubationTime, recoveryTime, maxRadius)
-
-
-            tag += 1
-
-            counts = ZaehleStatus(width, height, grid)
-
-
-            print(f"Tag {tag} | Gesund: {counts[0]}  Krank: {counts[1]}  Immun: {counts[2]}  Tot: {counts[3]}")
-            simulationsverlauf.append([durchlauf, tag, counts[0], counts[1], counts[2], counts[3]])
-
-            #Ende vom Durchlauf
-            if counts[1] == 0:
-                print("Durchlauf ", durchlauf, " Fertig!")
-
-                if durchlauf%sicherungsfrequenz ==0:
-                    name = csvSpeicherName + str(durchlauf)
-                    writeCSV(simulationsverlauf, name)
-                    simulationsverlauf = []
-                    print("Daten Gesichert")
-
-
-                durchlauf += 1
-
-                #Reseten fuer naechsten Durchlauf
-                setup = True
-                tag = 0
-
-
-        else:
-            headlessMode = False
-            
-
-
-
+        print(f"Frame {frameZaehler} | Gesund: {counts[0]}  Krank: {counts[1]}  Immun: {counts[2]}  Tot: {counts[3]}  |  Versuche: {debugVersuche[None]}  Erfolge: {debugErfolge[None]}")
 
 
 #==================================
-#Hauptmen�  logik
+#Hauptmenü  logik
 #===================================
 
     else:
         # Allgemein ------------------
-        with gui.sub_window("Hauptmen�", x=0, y=0, width=0.3, height=0.45):
+        with gui.sub_window("Hauptmenü", x=0, y=0, width=0.3, height=0.45):
 
             if gui.button("Allgemein"):
                 mode = 3
@@ -615,13 +528,6 @@ while window.running:
                 mode = 2
             if gui.button("Krankheit"):
                 mode = 4
-            if gui.button("Headless mode start"):
-                demografie = np.array([childDemo, adultDemo, rentnerDemo, plusDemo], dtype=np.float32) * 0.01
-                householdData = np.array([einsHaushalt, zweiHaushalt, dreiHaushalt, vierHaushalt, fuenfHaushalt, plusSechs], dtype=np.float32) * 0.01
-
-                headlessMode = True
-                mode = 0
-                setup = True
             gui.text("")
 
             #Start Button --------------------
@@ -629,7 +535,9 @@ while window.running:
                 if gui.button("Start"):
 
                     demografie = np.array([childDemo, adultDemo, rentnerDemo, plusDemo], dtype=np.float32) * 0.01
-                    householdData = np.array([einsHaushalt, zweiHaushalt, dreiHaushalt, vierHaushalt, fuenfHaushalt, plusSechs], dtype=np.float32) * 0.01
+                    householdData = np.array([einsHaushalt, zweiHaushalt, dreiHaushalt, vierHaushalt, fünfHaushalt, plusSechs], dtype=np.float32) * 0.01
+
+                    ResetTaichiFields(Cell, width, height, renderWidth, renderHeight)
 
                     simulationRunning = True
                     mode = 0
@@ -650,7 +558,111 @@ while window.running:
 
             if statusMeldungTimer > 0:
                 gui.text(statusMeldung)
-        
+
+        # Demografie----------------
+        if mode == 1:
+            with gui.sub_window("Demografie", x=0.3, y=0., width=0.5, height=0.4):
+                gui.text("0 - 19")
+
+                childDemo = gui.slider_int("%", childDemo, 0, 100)
+
+                gui.text("20 - 64")
+                adultDemo = gui.slider_int("% ", adultDemo, 0, 100)
+
+
+
+                gui.text("65 - 79")
+                rentnerDemo = gui.slider_int("%  ", rentnerDemo, 0, 100)
+
+                gui.text("80+")
+                plusDemo = 100 - (childDemo + adultDemo + rentnerDemo)
+
+                if plusDemo < 0:
+                    gui.text("!!! " + str(plusDemo) + " !!!")
+                    demoFehler = True
+                else:
+                    demoFehler = False
+                    gui.text(str(plusDemo))
+
+
+
+                gui.text("Altersfaktor")
+                ageFactor = gui.slider_int(" ", ageFactor, 0, 10)
+
+                gui.text("Maximale Anzahl Freunde")
+                socialInput = gui.slider_int("", socialInput, 0, 20)
+
+        if mode == 2:
+
+            with gui.sub_window("Haushalte", x=0.3, y=0., width=0.5, height=0.4):
+                gui.text("1 Person")
+                einsHaushalt = gui.slider_int("%", einsHaushalt, 0, 100)
+
+                gui.text("2 Personen")
+                zweiHaushalt = gui.slider_int("% ", zweiHaushalt, 0, 100)
+
+                gui.text("3 Personen")
+                dreiHaushalt = gui.slider_int("%   ", dreiHaushalt, 0, 100)
+
+                gui.text("4 Personen")
+                vierHaushalt = gui.slider_int("%    ", vierHaushalt, 0, 100)
+
+
+                gui.text("5 Personen")
+                fünfHaushalt = gui.slider_int("%     ", fünfHaushalt, 0, 100)
+
+
+                plusSechs = 100 - (einsHaushalt + zweiHaushalt + dreiHaushalt + vierHaushalt + fünfHaushalt)
+
+
+                if plusSechs < 0:
+                    gui.text("!!! " + str(plusSechs) + " !!!")
+                    haushaltFehler = True
+                else:
+                    haushaltFehler = False
+                    gui.text(str(plusSechs))
+
+                gui.text("Haushaltsfaktor")
+                householdFactor = gui.slider_int("", householdFactor, 0, 10)
+
+        if mode == 3:
+            with gui.sub_window("Allgemein", x=0.3, y=0., width=0.5, height=0.4):
+
+                gui.text("Höhe")
+                height = gui.slider_int("", height, 1, maxHeight)
+
+                gui.text("Breite")
+                width = gui.slider_int(" ", width, 1, maxWidth)
+
+
+                gui.text("Anzahl Zellen: " + str(height * width))
+
+                gui.text("Anzahl Tage")
+                maxDurchlauf = gui.slider_int("  ", maxDurchlauf, 0, 100)
+
+        if mode == 4:
+            with gui.sub_window("Krankheit", x=0.3, y=0., width=0.5, height=0.5):
+
+
+                gui.text("Infizierte am Anfang")
+                startKranke = gui.slider_int("", startKranke, 0, maxHeight)
+                gui.text("(wird auf Zellenzahl gedeckelt)")
+
+
+                gui.text("Übertragungsrate")
+                baseTransmissionrate = gui.slider_int(" ", baseTransmissionrate, 0, 100)
+
+                gui.text("Tödlichkeitsrate")
+                mortalityrate = gui.slider_int("  ", mortalityrate, 0, 100)
+
+                gui.text("Max. Ansteckungsradius")
+                maxRadius = gui.slider_int("   ", maxRadius, 1, 15)
+
+                gui.text("Inkubationszeit (Tage)")
+                incubationTime = gui.slider_int("    ", incubationTime, 1, 30)
+
+                gui.text("Genesungszeit (Tage)")
+                recoveryTime = gui.slider_int("     ", recoveryTime, 1, 30)
 
     canvas.set_image(renderColorField)
     window.show()
