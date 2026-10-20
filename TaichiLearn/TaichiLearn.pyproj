@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>960a09b6-dbf3-445f-b71d-cfb312d43b03</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>LinienZeichnen.py</StartupFile>
+    <StartupFile>Tkinter.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -22,6 +22,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="LinienZeichnen.py" />
+    <Compile Include="Tkinter.py" />
     <Compile Include="Pixel.py" />
     <Compile Include="zahlen.py" />
   </ItemGroup>
